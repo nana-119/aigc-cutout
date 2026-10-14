@@ -1,0 +1,47 @@
+:root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; color: #1b2430; background: #f4f6f8; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; }
+.shell { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 48px 0 72px; }
+header { margin-bottom: 28px; }
+.eyebrow { margin: 0 0 8px; color: #617084; font-size: 11px; letter-spacing: .16em; font-weight: 700; }
+h1, h2, p { margin-top: 0; }
+h1 { margin-bottom: 10px; font-size: clamp(32px, 6vw, 56px); letter-spacing: -.04em; }
+h2 { margin-bottom: 0; font-size: 20px; }
+.notice { color: #98621b; background: #fff3d8; border: 1px solid #f0d398; padding: 10px 12px; border-radius: 10px; display: inline-block; }
+.panel { background: #fff; border: 1px solid #e3e8ee; border-radius: 18px; padding: 20px; margin-top: 16px; box-shadow: 0 10px 30px rgba(31, 45, 61, .05); }
+label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+input[type=password] { width: 100%; border: 1px solid #ccd5df; border-radius: 10px; padding: 11px 12px; font-size: 14px; }
+.access-row, .upload-actions, .result-head, .viewer-toolbar, .result-actions { display: flex; align-items: center; gap: 12px; justify-content: space-between; }
+.access-row input { flex: 1; }
+button { border: 0; border-radius: 10px; background: #1e66f5; color: #fff; cursor: pointer; padding: 10px 15px; font-weight: 700; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.secondary, .toggle-group button { color: #2b3c52; background: #edf1f5; }
+.muted { color: #718095; font-size: 13px; }
+.good { color: #25855a; }
+.dropzone { text-align: center; border: 1.5px dashed #bcc8d7; border-radius: 14px; padding: 44px 20px; cursor: pointer; transition: .15s ease; }
+.dropzone.dragging, .dropzone:hover { border-color: #1e66f5; background: #f5f8ff; }
+.drop-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+.upload-actions { margin-top: 16px; }
+.upload-actions .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status { padding: 6px 9px; border-radius: 999px; background: #eef1f4; font-size: 12px; }
+.status.succeeded, .succeeded { color: #187348; background: #e4f5ec; }
+.status.failed, .failed { color: #a33a3a; background: #fdeaea; }
+.status.processing, .processing { color: #8b6414; background: #fff4d5; }
+.error { color: #a33a3a; white-space: pre-wrap; }
+.viewer { margin-top: 18px; }
+.viewer-toolbar { flex-wrap: wrap; padding-bottom: 16px; }
+.viewer-toolbar label { margin: 0; font-weight: 400; }
+.toggle-group { display: flex; gap: 6px; flex-wrap: wrap; }
+.toggle-group button { padding: 7px 10px; font-size: 12px; }
+.toggle-group button.active { color: #fff; background: #1e66f5; }
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+figure { margin: 0; min-width: 0; }
+figcaption { color: #617084; font-size: 12px; margin: 0 0 6px; }
+.image-frame { height: min(54vw, 500px); min-height: 220px; overflow: auto; display: flex; align-items: center; justify-content: center; background: #f2f4f7; border-radius: 12px; }
+.image-frame.checker { background-color: #fff; background-image: linear-gradient(45deg, #d9dde2 25%, transparent 25%), linear-gradient(-45deg, #d9dde2 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #d9dde2 75%), linear-gradient(-45deg, transparent 75%, #d9dde2 75%); background-size: 24px 24px; background-position: 0 0, 0 12px, 12px -12px, -12px 0; }
+.image-frame img { width: 100%; height: auto; object-fit: contain; transition: width .1s ease; }
+.result-actions { justify-content: flex-end; margin-top: 14px; }
+.history { margin-top: 16px; display: grid; gap: 8px; }
+.history-row { width: 100%; display: flex; justify-content: space-between; background: #f8fafc; color: #2b3c52; text-align: left; font-weight: 500; }
+.history-row span:last-child { font-size: 12px; }
+@media (max-width: 700px) { .shell { padding-top: 28px; } .compare { grid-template-columns: 1fr; } .access-row, .upload-actions { align-items: stretch; flex-direction: column; } .upload-actions button { width: 100%; } }

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>精细抠图 · 开发预览</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <p class="eyebrow">AIGC TOOLBOX / DEV PREVIEW</p>
+      <h1>精细抠图</h1>
+      <p class="notice">开发预览，尚未完成 work-v2 正式接入。当前仅允许本机回环访问。</p>
+    </header>
+
+    <section class="panel access-panel">
+      <label for="token">开发预览 token</label>
+      <div class="access-row">
+        <input id="token" type="password" autocomplete="off" placeholder="启动服务时设置的 CUTOUT_DEV_TOKEN">
+        <button id="connect">连接</button>
+      </div>
+      <p id="connection" class="muted">未连接</p>
+    </section>
+
+    <section class="panel upload-panel">
+      <div id="dropzone" class="dropzone" tabindex="0">
+        <input id="file" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+        <p class="drop-title">拖入原图，或点击选择</p>
+        <p class="muted">支持 PNG、JPEG、WEBP；原图不会发送到外部服务</p>
+        <button id="choose" class="secondary">选择图片</button>
+      </div>
+      <div class="upload-actions">
+        <span id="selected" class="muted">尚未选择图片</span>
+        <button id="process" disabled>开始抠图</button>
+      </div>
+    </section>
+
+    <section id="resultPanel" class="panel result-panel" hidden>
+      <div class="result-head">
+        <div>
+          <p class="eyebrow">RESULT</p>
+          <h2 id="taskTitle">处理结果</h2>
+        </div>
+        <span id="status" class="status">等待中</span>
+      </div>
+      <p id="stage" class="muted"></p>
+      <p id="error" class="error"></p>
+      <div id="viewer" class="viewer" hidden>
+        <div class="viewer-toolbar">
+          <label>缩放 <input id="zoom" type="range" min="25" max="200" value="100"></label>
+          <div class="toggle-group">
+            <button data-kind="transparent" class="active">透明</button>
+            <button data-kind="black">黑底</button>
+            <button data-kind="white">白底</button>
+            <button data-kind="alpha">Alpha</button>
+          </div>
+        </div>
+        <div class="compare">
+          <figure><figcaption>原图</figcaption><div class="image-frame"><img id="original" alt="原图"></div></figure>
+          <figure><figcaption>抠图结果</figcaption><div class="image-frame checker"><img id="preview" alt="抠图结果"></div></figure>
+        </div>
+        <div class="result-actions">
+          <button id="download">下载透明 PNG</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel history-panel">
+      <div class="result-head"><div><p class="eyebrow">HISTORY</p><h2>我的任务</h2></div><button id="refresh" class="secondary">刷新</button></div>
+      <div id="history" class="history"><p class="muted">连接后显示本地开发任务</p></div>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

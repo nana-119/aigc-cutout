@@ -1,0 +1,23 @@
+.venv/
+__pycache__/
+*.py[cod]
+.DS_Store
+
+models/*.onnx
+models/*.download
+inputs/*
+outputs/*
+reports/*
+data/*
+references/*
+!inputs/.gitkeep
+!outputs/.gitkeep
+!reports/.gitkeep
+!data/.gitkeep
+!references/README.md
+
+# Local project governance and internal integration notes
+AGENTS.md
+CODEX_CUTOUT_HANDOFF.md
+DEVELOPMENT_LOG.md
+INTEGRATION_HANDOFF.md
