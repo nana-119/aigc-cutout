@@ -153,6 +153,17 @@ def save_outputs(image: Image.Image, alpha: Image.Image, output_dir: Path, stem:
     return paths
 
 
+def verify_outputs(paths: dict[str, Path]) -> None:
+    """Assert every declared artifact exists and is non-empty.
+
+    The task store marks a run succeeded only after this passes, so a
+    succeeded database state implies the cutout files are actually on disk.
+    """
+    for key, path in paths.items():
+        if not path.is_file() or path.stat().st_size == 0:
+            raise RuntimeError(f"推理产物缺失或为空: {key} ({path})")
+
+
 def run(
     input_path: Path,
     output_dir: Path,
@@ -179,6 +190,7 @@ def run(
         alpha = Image.fromarray(np.minimum(np.asarray(alpha), source_alpha).astype(np.uint8))
     stem = input_path.stem
     paths = save_outputs(original, alpha, output_dir, stem)
+    verify_outputs(paths)
     alpha_array = np.asarray(alpha)
     result = RunResult(
         input_path=str(input_path.resolve()),

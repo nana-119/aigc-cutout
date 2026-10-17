@@ -17,6 +17,7 @@ from cutout_tool.infer import (  # noqa: E402
     prepare_input,
     prepare_model_image,
     run,
+    verify_outputs,
 )
 
 
@@ -102,6 +103,22 @@ class PipelineTest(unittest.TestCase):
             self.assertTrue(np.all(session.tensor[0, :, 0, 0] < -1.0))
             with Image.open(root / "out" / "palette_transparent.png") as result:
                 self.assertEqual(result.getchannel("A").getpixel((0, 0)), 0)
+
+
+    def test_verify_outputs_asserts_all_artifacts_exist_and_nonempty(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            existing = root / "a.png"
+            existing.write_bytes(b"data")
+            verify_outputs({"transparent": existing})
+            with self.assertRaises(RuntimeError):
+                verify_outputs({"transparent": existing, "alpha": root / "missing.png"})
+            empty = root / "empty.png"
+            empty.write_bytes(b"")
+            with self.assertRaises(RuntimeError):
+                verify_outputs({"transparent": empty})
 
 
 if __name__ == "__main__":

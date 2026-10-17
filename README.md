@@ -81,6 +81,13 @@ python -m cutout_tool.server `
 
 状态为 `queued`、`processing`、`succeeded`、`failed`；服务重启时未完成任务会变为失败并给出可重试提示，不会长期卡在 processing。上传限制为 25 MB、40 MP，文件内容会重新校验格式，存储名称使用随机任务 ID。
 
+幂等与并发控制（2026-10-17 升级）：
+
+- **幂等去重**：上传按「owner + 图片内容 SHA-256」查重。重复提交同一张图直接返回已有任务，响应带 `reused: true`（成功任务返回 200），不重复推理；此前失败的重复图片复用同一任务 ID 并消耗其唯一一次重试。
+- **单用户并发上限**：`MAX_INFLIGHT_PER_OWNER = 1`，同一 owner 已存在 `queued/processing` 任务时，新提交与重试均返回 409；不同 owner 互不影响，全局仍为单 worker 串行执行。
+- **产物一致性**：任务标记 `succeeded` 前校验透明 PNG、黑/白底预览、Alpha 四件套均存在且非空（`infer.verify_outputs`），杜绝“数据库显示成功但文件缺失”。
+- **旧库自动迁移**：启动时若任务表缺少 `image_sha256` 列则自动 `ALTER TABLE` 补充，并创建 `(owner_id, image_sha256)` 索引；历史任务哈希为空，不参与幂等匹配。
+
 ## CLI 真实推理
 
 ```bash

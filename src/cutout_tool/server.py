@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import mimetypes
 import os
@@ -10,6 +11,7 @@ import sqlite3
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from email import policy
 from email.parser import BytesParser
@@ -25,6 +27,7 @@ from .infer import DEFAULT_MODEL_PATH, run
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 MAX_PIXELS = 40_000_000
 MAX_RETRIES = 1
+MAX_INFLIGHT_PER_OWNER = 1  # per-owner ceiling for queued+processing tasks, protecting local CPU
 ALLOWED_FORMATS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp"}
 FILE_KINDS = {
     "original": ("input", "attachment"),
@@ -109,10 +112,22 @@ class TaskStore:
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self):
+        """Open a connection that commits on success and always closes the file handle.
+
+        The bare `sqlite3.connect` context manager only commits/rolls back and never
+        closes the connection; on Windows the open handle to cutout.db blocks
+        directory cleanup (WinError 32). `closing()` alone would skip the commit and
+        silently lose writes, so both semantics are combined here.
+        """
         connection = sqlite3.connect(self.db_path, timeout=30)
         connection.row_factory = sqlite3.Row
-        return connection
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
 
     def _initialize(self) -> None:
         with self._connect() as connection:
@@ -132,8 +147,15 @@ class TaskStore:
                     max_retries INTEGER NOT NULL DEFAULT 1,
                     result_json TEXT,
                     width INTEGER,
-                    height INTEGER
+                    height INTEGER,
+                    image_sha256 TEXT
                 )"""
+            )
+            columns = [row[1] for row in connection.execute("PRAGMA table_info(tasks)")]
+            if "image_sha256" not in columns:
+                connection.execute("ALTER TABLE tasks ADD COLUMN image_sha256 TEXT")
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_tasks_owner_hash ON tasks(owner_id, image_sha256)"
             )
 
     def recover_stale(self) -> None:
@@ -146,17 +168,46 @@ class TaskStore:
                 (utc_now(),),
             )
 
-    def create(self, task_id: str, owner_id: str, name: str, input_path: Path, output_dir: Path, size: tuple[int, int]) -> dict:
+    def create(
+        self,
+        task_id: str,
+        owner_id: str,
+        name: str,
+        input_path: Path,
+        output_dir: Path,
+        size: tuple[int, int],
+        image_sha256: str,
+    ) -> dict:
         now = utc_now()
         with self._connect() as connection:
             connection.execute(
                 """INSERT INTO tasks
                    (id, owner_id, original_name, input_path, output_dir, status, stage,
-                    created_at, updated_at, max_retries, width, height)
-                   VALUES (?, ?, ?, ?, ?, 'queued', 'queued', ?, ?, ?, ?, ?)""",
-                (task_id, owner_id, name, str(input_path), str(output_dir), now, now, MAX_RETRIES, size[0], size[1]),
+                    created_at, updated_at, max_retries, width, height, image_sha256)
+                   VALUES (?, ?, ?, ?, ?, 'queued', 'queued', ?, ?, ?, ?, ?, ?)""",
+                (task_id, owner_id, name, str(input_path), str(output_dir), now, now, MAX_RETRIES, size[0], size[1], image_sha256),
             )
         return self.get(task_id)
+
+    def find_duplicate(self, owner_id: str, image_sha256: str) -> dict | None:
+        """Latest task of the same owner for the same image content; used for idempotent reuse."""
+        with self._connect() as connection:
+            row = connection.execute(
+                """SELECT * FROM tasks
+                   WHERE owner_id=? AND image_sha256=?
+                   ORDER BY created_at DESC LIMIT 1""",
+                (owner_id, image_sha256),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def count_inflight(self, owner_id: str) -> int:
+        with self._connect() as connection:
+            row = connection.execute(
+                """SELECT COUNT(*) AS n FROM tasks
+                   WHERE owner_id=? AND status IN ('queued', 'processing')""",
+                (owner_id,),
+            ).fetchone()
+        return int(row["n"])
 
     def get(self, task_id: str) -> dict | None:
         with self._connect() as connection:
@@ -339,12 +390,33 @@ class CutoutHandler(BaseHTTPRequestHandler):
             return self._create_task(owner)
         parts = [unquote(part) for part in path.split("/") if part]
         if len(parts) == 4 and parts[:2] == ["api", "tasks"] and parts[3] == "retry":
+            if self.app.store.count_inflight(owner) >= MAX_INFLIGHT_PER_OWNER:
+                return self._error(409, "同一用户已有进行中的任务，请等待完成后再提交")
             task = self.app.store.retry(parts[2], owner)
             if not task:
                 return self._error(409, "任务不可重试或已达到重试上限")
             self.app.manager.submit(task["id"])
             return self._json(202, public_task(task))
         self._error(404, "接口不存在")
+
+    def _reuse_task(self, owner: str, task: dict) -> None:
+        """Idempotent reuse: an image already known to this owner triggers no new inference."""
+        if task["status"] in ("succeeded", "queued", "processing"):
+            payload = public_task(task)
+            payload["reused"] = True
+            return self._json(200 if task["status"] == "succeeded" else 202, payload)
+        # failed: reuse the same task id and spend its single retry.
+        if task["retries"] >= task["max_retries"]:
+            return self._error(409, "该图片此前已失败且重试次数已用完，请稍后重新上传")
+        if self.app.store.count_inflight(owner) >= MAX_INFLIGHT_PER_OWNER:
+            return self._error(409, "同一用户已有进行中的任务，请等待完成后再提交")
+        retried = self.app.store.retry(task["id"], owner)
+        if not retried:
+            return self._error(409, "任务不可重试")
+        self.app.manager.submit(retried["id"])
+        payload = public_task(retried)
+        payload["reused"] = True
+        return self._json(202, payload)
 
     def _create_task(self, owner: str) -> None:
         length_header = self.headers.get("Content-Length")
@@ -359,6 +431,12 @@ class CutoutHandler(BaseHTTPRequestHandler):
             original_name, payload = parse_upload(self.headers.get("Content-Type", ""), body)
             if len(payload) > MAX_UPLOAD_BYTES:
                 raise ValueError(f"文件大小超过上限 {MAX_UPLOAD_BYTES // 1024 // 1024} MB")
+            image_sha256 = hashlib.sha256(payload).hexdigest()
+            duplicate = self.app.store.find_duplicate(owner, image_sha256)
+            if duplicate:
+                return self._reuse_task(owner, duplicate)
+            if self.app.store.count_inflight(owner) >= MAX_INFLIGHT_PER_OWNER:
+                return self._error(409, "同一用户已有进行中的任务，请等待完成后再提交")
             task_id = uuid.uuid4().hex
             task_dir = self.app.data_dir / "tasks" / task_id
             task_dir.mkdir(parents=True, exist_ok=False)
@@ -368,7 +446,7 @@ class CutoutHandler(BaseHTTPRequestHandler):
             input_path = task_dir / f"input{ALLOWED_FORMATS[image_format]}"
             upload_path.replace(input_path)
             output_dir = task_dir / "outputs"
-            task = self.app.store.create(task_id, owner, original_name, input_path, output_dir, size)
+            task = self.app.store.create(task_id, owner, original_name, input_path, output_dir, size, image_sha256)
             self.app.manager.submit(task_id)
         except Exception as exc:  # noqa: BLE001 - convert validation errors to a clear API response.
             if "task_dir" in locals() and task_dir.exists():
